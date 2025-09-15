@@ -4,14 +4,13 @@ import { Layers, TrendingUp, DollarSign, CalendarClock, Trash2 } from "lucide-re
 import { createClient } from '@supabase/supabase-js';
 
 // ---- Number & currency formatters (de-DE) ----
-const nf = new Intl.NumberFormat('de-DE'); // 60.000
-const tf = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }); // 60.000 ₺
-const fmt = (v?: number) => nf.format((v ?? 0));
+const nf  = new Intl.NumberFormat('de-DE'); // 60.000
+const tf  = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }); // 60.000 ₺
+const fmt  = (v?: number) => nf.format((v ?? 0));
 const fmtTL = (v?: number) => tf.format((v ?? 0));
 
-
 // Supabase ayarları
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || (window as any).VITE_SUPABASE_URL;
+const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL  || (window as any).VITE_SUPABASE_URL;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON || (window as any).VITE_SUPABASE_ANON;
 const supabase = (SUPABASE_URL && SUPABASE_ANON) ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
 
@@ -188,7 +187,11 @@ export default function Dashboard() {
             <tbody>
               {dailyEntries.map(e=>(
                 <tr key={e.id}>
-                  <td>{e.date}</td><td>{e.channel}</td><td>{e.revenue}</td><td>{e.spend}</td><td>{e.units}</td>
+                  <td>{e.date}</td>
+                  <td>{e.channel}</td>
+                  <td>{fmtTL(e.revenue)}</td>
+                  <td>{fmtTL(e.spend)}</td>
+                  <td>{fmt(e.units)}</td>
                   <td><button onClick={()=>deleteDaily(e)} title="Delete"><Trash2 style={{width:16,height:16}}/></button></td>
                 </tr>
               ))}
@@ -197,38 +200,122 @@ export default function Dashboard() {
         </div>
       </Card>
 
+      {/* REVENUE */}
       <div className="hgrid grid2" style={{marginTop:16}}>
         <Card>
           <div className="header"><div><TrendingUp style={{width:18,height:18}}/> Revenue</div></div>
           <div style={{height:300}}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={tsRevenue}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="period"/><YAxis/><Tooltip/><Legend/><Line type="monotone" dataKey="Trendyol" stroke="#4f46e5" /><Line type="monotone" dataKey="Hepsiburada" stroke="#16a34a" /></LineChart>
+              <LineChart data={tsRevenue}>
+                <defs>
+                  <linearGradient id="gradTyRev" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#ff7f0e"/><stop offset="100%" stopColor="#ffb347"/>
+                  </linearGradient>
+                  <linearGradient id="gradHbRev" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#7c62ff"/><stop offset="100%" stopColor="#b19cd9"/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#3a3a3a" />
+                <XAxis dataKey="period" stroke="#cfd3ff"/>
+                <YAxis stroke="#cfd3ff" tickFormatter={(v)=>nf.format(v as number)} />
+                <Tooltip
+                  contentStyle={{ background:"#111", border:"1px solid #333", color:"#fff" }}
+                  formatter={(val:any, name)=>[fmtTL(val as number), name]}
+                />
+                <Legend/>
+                <Line type="monotone" dataKey="Trendyol" stroke="url(#gradTyRev)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
+                <Line type="monotone" dataKey="Hepsiburada" stroke="url(#gradHbRev)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </Card>
+
+        {/* SPEND */}
         <Card>
           <div className="header"><div><DollarSign style={{width:18,height:18}}/> Spend</div></div>
           <div style={{height:300}}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={tsSpend}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="period"/><YAxis/><Tooltip/><Legend/><Line type="monotone" dataKey="Trendyol" stroke="#4f46e5" /><Line type="monotone" dataKey="Hepsiburada" stroke="#16a34a" /></LineChart>
+              <LineChart data={tsSpend}>
+                <defs>
+                  <linearGradient id="gradTySp" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#ff7f0e"/><stop offset="100%" stopColor="#ffb347"/>
+                  </linearGradient>
+                  <linearGradient id="gradHbSp" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#7c62ff"/><stop offset="100%" stopColor="#b19cd9"/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#3a3a3a" />
+                <XAxis dataKey="period" stroke="#cfd3ff"/>
+                <YAxis stroke="#cfd3ff" tickFormatter={(v)=>nf.format(v as number)} />
+                <Tooltip
+                  contentStyle={{ background:"#111", border:"1px solid #333", color:"#fff" }}
+                  formatter={(val:any, name)=>[fmtTL(val as number), name]}
+                />
+                <Legend/>
+                <Line type="monotone" dataKey="Trendyol" stroke="url(#gradTySp)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
+                <Line type="monotone" dataKey="Hepsiburada" stroke="url(#gradHbSp)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </Card>
       </div>
+
+      {/* UNITS & ROAS */}
       <div className="hgrid grid2" style={{marginTop:16}}>
+        {/* UNITS */}
         <Card>
           <div className="header"><div><CalendarClock style={{width:18,height:18}}/> Units</div></div>
           <div style={{height:300}}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={tsUnits}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="period"/><YAxis/><Tooltip/><Legend/><Line type="monotone" dataKey="Trendyol" stroke="#4f46e5" /><Line type="monotone" dataKey="Hepsiburada" stroke="#16a34a" /></LineChart>
+              <LineChart data={tsUnits}>
+                <defs>
+                  <linearGradient id="gradTyUn" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#ff7f0e"/><stop offset="100%" stopColor="#ffb347"/>
+                  </linearGradient>
+                  <linearGradient id="gradHbUn" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#7c62ff"/><stop offset="100%" stopColor="#b19cd9"/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#3a3a3a" />
+                <XAxis dataKey="period" stroke="#cfd3ff"/>
+                <YAxis stroke="#cfd3ff" tickFormatter={(v)=>nf.format(v as number)} />
+                <Tooltip
+                  contentStyle={{ background:"#111", border:"1px solid #333", color:"#fff" }}
+                  formatter={(val:any, name)=>[fmt(val as number), name]}
+                />
+                <Legend/>
+                <Line type="monotone" dataKey="Trendyol" stroke="url(#gradTyUn)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
+                <Line type="monotone" dataKey="Hepsiburada" stroke="url(#gradHbUn)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </Card>
+
+        {/* ROAS */}
         <Card>
           <div className="header"><div><DollarSign style={{width:18,height:18}}/> ROAS</div></div>
           <div style={{height:300}}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={tsROAS}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="period"/><YAxis/><Tooltip/><Legend/><Line type="monotone" dataKey="Trendyol" stroke="#4f46e5" /><Line type="monotone" dataKey="Hepsiburada" stroke="#16a34a" /></LineChart>
+              <LineChart data={tsROAS}>
+                <defs>
+                  <linearGradient id="gradTyRo" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#ff7f0e"/><stop offset="100%" stopColor="#ffb347"/>
+                  </linearGradient>
+                  <linearGradient id="gradHbRo" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#7c62ff"/><stop offset="100%" stopColor="#b19cd9"/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#3a3a3a" />
+                <XAxis dataKey="period" stroke="#cfd3ff"/>
+                <YAxis stroke="#cfd3ff" tickFormatter={(v)=>nf.format(v as number)} />
+                <Tooltip
+                  contentStyle={{ background:"#111", border:"1px solid #333", color:"#fff" }}
+                  formatter={(val:any, name)=>[(val as number).toFixed(2), name]}
+                />
+                <Legend/>
+                <Line type="monotone" dataKey="Trendyol" stroke="url(#gradTyRo)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
+                <Line type="monotone" dataKey="Hepsiburada" stroke="url(#gradHbRo)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </Card>
@@ -236,3 +323,4 @@ export default function Dashboard() {
     </div>
   );
 }
+
