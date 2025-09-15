@@ -253,17 +253,22 @@ export default function Dashboard() {
   if (loading) return <div style={{ padding: 20 }}>Loading…</div>;
 
   return (
-    <div style={{ padding: 24 }}>
-      <div className="header">
-        <h1><Layers style={{ width: 20, height: 20, verticalAlign: "-3px" }} /> Vibrant Skin Dashboard</h1>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <select value={mode} onChange={e => setMode(e.target.value as any)}>
-            <option value="Monthly">Monthly View</option>
-            <option value="Weekly">Weekly View</option>
-          </select>
-          <span className="small">Storage: <b>{backend}</b></span>
-        </div>
-      </div>
+const [title, setTitle] = useState("Vibrant Skin Dashboard");
+
+...
+
+<div className="header">
+  <h1>
+    <Layers style={{ width: 20, height: 20, verticalAlign: "-3px" }} /> {title}
+  </h1>
+  <input
+    type="text"
+    value={title}
+    onChange={(e) => setTitle(e.target.value)}
+    style={{ marginLeft: 12, padding: "4px 8px", borderRadius: 4 }}
+  />
+</div>
+
 
       {/* BULK WEEKLY IMPORT (CSV) */}
       <Card>
