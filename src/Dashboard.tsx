@@ -4,11 +4,11 @@ import { Layers, TrendingUp, DollarSign, CalendarClock, Trash2 } from "lucide-re
 import { createClient } from '@supabase/supabase-js';
 
 // ---- Number & currency formatters (de-DE) ----
-const nf = new Intl.NumberFormat('de-DE');                  // 60.000
+const nf = new Intl.NumberFormat('de-DE'); // 60.000
 const tf = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }); // 60.000 ₺
-const fmtInt = (v?: number) => (v ?? 0);
-const fmt = (v?: number) => nf.format(fmtInt(v));
-const fmtTL = (v?: number) => tf.format(fmtInt(v));
+const fmt = (v?: number) => nf.format((v ?? 0));
+const fmtTL = (v?: number) => tf.format((v ?? 0));
+
 
 // Supabase ayarları
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || (window as any).VITE_SUPABASE_URL;
