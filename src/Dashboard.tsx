@@ -1,3 +1,19 @@
+const [title, setTitle] = useState("Vibrant Skin Dashboard");
+
+...
+
+<div className="header">
+  <h1>
+    <Layers style={{ width: 20, height: 20, verticalAlign: "-3px" }} /> {title}
+  </h1>
+  <input
+    type="text"
+    value={title}
+    onChange={(e) => setTitle(e.target.value)}
+    style={{ marginLeft: 12, padding: "4px 8px", borderRadius: 4 }}
+  />
+</div>
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, Legend,
