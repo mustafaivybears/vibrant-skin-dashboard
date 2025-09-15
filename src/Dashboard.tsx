@@ -252,7 +252,6 @@ export default function Dashboard() {
 
   if (loading) return <div style={{ padding: 20 }}>Loading…</div>;
 
-  return (
 const [title, setTitle] = useState("Vibrant Skin Dashboard");
 
 ...
