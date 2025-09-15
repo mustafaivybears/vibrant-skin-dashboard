@@ -9,7 +9,6 @@ const tf  = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'TRY',
 const fmt  = (v?: number) => nf.format((v ?? 0));
 const fmtTL = (v?: number) => tf.format((v ?? 0));
 
-// Supabase ayarları
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL  || (window as any).VITE_SUPABASE_URL;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON || (window as any).VITE_SUPABASE_ANON;
 const supabase = (SUPABASE_URL && SUPABASE_ANON) ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
@@ -136,6 +135,7 @@ export default function Dashboard() {
     setDailyEntries(prev => { const next=prev.filter(e=>e.id!==entry.id); persistDaily(entry,'delete'); return next; });
   }
 
+  // ---- View datasets (mode'a göre) ----
   const filtered = useMemo(()=>periods.filter(p=>p.kind===mode).sort((a,b)=>a.id.localeCompare(b.id)), [periods,mode]);
   const rows = useMemo(()=>filtered.map((p,i)=>{
     const prev = filtered[i-1];
@@ -143,8 +143,8 @@ export default function Dashboard() {
       const cur=p.data[ch]; const prv=prev?.data[ch];
       const roas = cur.spend>0 ? cur.revenue/cur.spend : undefined;
       const prevRoas = prv && prv.spend>0 ? prv.revenue/prv.spend : undefined;
-      const pct = (a?:number,b?:number)=> (a===undefined||b===undefined||b===0)?undefined:((a-b)/b)*100;
-      return { roas, momRev:pct(cur?.revenue,prv?.revenue), momSpend:pct(cur?.spend,prv?.spend), momUnits:pct(cur?.units,prv?.units), momRoas:pct(roas,prevRoas) };
+      const pp = (a?:number,b?:number)=> (a===undefined||b===undefined||b===0)?undefined:((a-b)/b)*100;
+      return { roas, momRev:pp(cur?.revenue,prv?.revenue), momSpend:pp(cur?.spend,prv?.spend), momUnits:pp(cur?.units,prv?.units), momRoas:pp(roas,prevRoas) };
     };
     return { ...p, meta:{Trendyol:calc('Trendyol'), Hepsiburada:calc('Hepsiburada')} };
   }), [filtered]);
@@ -154,6 +154,55 @@ export default function Dashboard() {
   const tsSpend   = useMemo(()=>ts('spend'),[rows]);
   const tsUnits   = useMemo(()=>ts('units'),[rows]);
   const tsROAS    = useMemo(()=>rows.map(r=>({ period:r.label, Trendyol:r.meta.Trendyol.roas ?? 0, Hepsiburada:r.meta.Hepsiburada.roas ?? 0 })),[rows]);
+
+  // ---- KPI (seçili mode'a göre!)
+  const kpiRows = filtered; // mode: Monthly veya Weekly
+  const lastIdx = kpiRows.length - 1;
+  const currP = lastIdx >= 0 ? kpiRows[lastIdx] : undefined;
+  const prevP = lastIdx > 0 ? kpiRows[lastIdx - 1] : undefined;
+
+  const sumAll = (p?: Period, key?: keyof ChannelDatum) =>
+    p && key ? (p.data.Trendyol[key] + p.data.Hepsiburada[key]) : 0;
+
+  const kpiTotal = {
+    revenue: { curr: sumAll(currP, "revenue"), prev: sumAll(prevP, "revenue") },
+    units:   { curr: sumAll(currP, "units"),   prev: sumAll(prevP, "units") },
+    spend:   { curr: sumAll(currP, "spend"),   prev: sumAll(prevP, "spend") },
+  };
+  const dlt = (c:number,p:number)=> (p?((c-p)/p)*100:undefined);
+  const kpiTotalDelta = {
+    revenue: dlt(kpiTotal.revenue.curr, kpiTotal.revenue.prev),
+    units:   dlt(kpiTotal.units.curr,   kpiTotal.units.prev),
+    spend:   dlt(kpiTotal.spend.curr,   kpiTotal.spend.prev),
+  };
+
+  const byCh = (ch:Channel, key:keyof ChannelDatum) => ({
+    curr: currP ? currP.data[ch][key] : 0,
+    prev: prevP ? prevP.data[ch][key] : 0,
+    delta: dlt(currP ? currP.data[ch][key] : 0, prevP ? prevP.data[ch][key] : 0)
+  });
+  const kpiTY = {
+    revenue: byCh("Trendyol","revenue"),
+    units:   byCh("Trendyol","units"),
+    spend:   byCh("Trendyol","spend"),
+  };
+  const kpiHB = {
+    revenue: byCh("Hepsiburada","revenue"),
+    units:   byCh("Hepsiburada","units"),
+    spend:   byCh("Hepsiburada","spend"),
+  };
+
+  // ---- Weekly timeline (sum of channels) ----
+  const weeklyRows = useMemo(() => periods
+    .filter(p => p.kind === "Weekly")
+    .sort((a,b)=>a.id.localeCompare(b.id)), [periods]);
+
+  const tsTimeline = weeklyRows.map(w => ({
+    period: w.label,
+    Revenue: w.data.Trendyol.revenue + w.data.Hepsiburada.revenue,
+    Spend:   w.data.Trendyol.spend   + w.data.Hepsiburada.spend,
+    Units:   w.data.Trendyol.units   + w.data.Hepsiburada.units,
+  }));
 
   if (loading) return <div style={{padding:20}}>Loading…</div>;
 
@@ -170,6 +219,76 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* KPI — TOTAL (mode'a göre) */}
+      <div className="hgrid" style={{gridTemplateColumns:'repeat(3, minmax(0,1fr))', margin:'0 0 12px 0'}}>
+        <Card>
+          <div className="small">Revenue (vs previous {mode === 'Monthly' ? 'month' : 'week'})</div>
+          <div style={{display:'flex', alignItems:'baseline', gap:12}}>
+            <div style={{fontSize:28, fontWeight:700}}>{fmtTL(kpiTotal.revenue.curr)}</div>
+            <div className="small" style={{color:(kpiTotalDelta.revenue??0) >= 0 ? '#10b981' : '#ef4444'}}>
+              {kpiTotalDelta.revenue !== undefined ? `${kpiTotalDelta.revenue >= 0 ? '▲' : '▼'} ${kpiTotalDelta.revenue.toFixed(1)}%` : '—'}
+            </div>
+          </div>
+          <div className="small">Prev: {fmtTL(kpiTotal.revenue.prev)}</div>
+        </Card>
+
+        <Card>
+          <div className="small">Units (vs previous {mode === 'Monthly' ? 'month' : 'week'})</div>
+          <div style={{display:'flex', alignItems:'baseline', gap:12}}>
+            <div style={{fontSize:28, fontWeight:700}}>{fmt(kpiTotal.units.curr)}</div>
+            <div className="small" style={{color:(kpiTotalDelta.units??0) >= 0 ? '#10b981' : '#ef4444'}}>
+              {kpiTotalDelta.units !== undefined ? `${kpiTotalDelta.units >= 0 ? '▲' : '▼'} ${kpiTotalDelta.units.toFixed(1)}%` : '—'}
+            </div>
+          </div>
+          <div className="small">Prev: {fmt(kpiTotal.units.prev)}</div>
+        </Card>
+
+        <Card>
+          <div className="small">Spend (vs previous {mode === 'Monthly' ? 'month' : 'week'})</div>
+          <div style={{display:'flex', alignItems:'baseline', gap:12}}>
+            <div style={{fontSize:28, fontWeight:700}}>{fmtTL(kpiTotal.spend.curr)}</div>
+            <div className="small" style={{color:(kpiTotalDelta.spend??0) >= 0 ? '#10b981' : '#ef4444'}}>
+              {kpiTotalDelta.spend !== undefined ? `${kpiTotalDelta.spend >= 0 ? '▲' : '▼'} ${kpiTotalDelta.spend.toFixed(1)}%` : '—'}
+            </div>
+          </div>
+          <div className="small">Prev: {fmtTL(kpiTotal.spend.prev)}</div>
+        </Card>
+      </div>
+
+      {/* KPI — BY CHANNEL */}
+      <div className="hgrid" style={{gridTemplateColumns:'repeat(3, minmax(0,1fr))', marginBottom:12}}>
+        {/* Trendyol */}
+        <Card>
+          <div className="small">Trendyol — Revenue ({mode})</div>
+          <div style={{display:'flex',gap:10,alignItems:'baseline'}}>
+            <div style={{fontSize:22,fontWeight:700,color:'#ff9a2f'}}>{fmtTL(kpiTY.revenue.curr)}</div>
+            <div className="small" style={{color:(kpiTY.revenue.delta??0)>=0?'#10b981':'#ef4444'}}>
+              {kpiTY.revenue.delta!==undefined ? `${kpiTY.revenue.delta>=0?'▲':'▼'} ${kpiTY.revenue.delta.toFixed(1)}%` : '—'}
+            </div>
+          </div>
+          <div className="small">Units: {fmt(kpiTY.units.curr)} ({kpiTY.units.delta!==undefined ? `${kpiTY.units.delta>=0?'▲':'▼'} ${kpiTY.units.delta.toFixed(1)}%`:'—'}) • Spend: {fmtTL(kpiTY.spend.curr)} ({kpiTY.spend.delta!==undefined ? `${kpiTY.spend.delta>=0?'▲':'▼'} ${kpiTY.spend.delta.toFixed(1)}%`:'—'})</div>
+        </Card>
+
+        {/* Hepsiburada */}
+        <Card>
+          <div className="small">Hepsiburada — Revenue ({mode})</div>
+          <div style={{display:'flex',gap:10,alignItems:'baseline'}}>
+            <div style={{fontSize:22,fontWeight:700,color:'#9e88ff'}}>{fmtTL(kpiHB.revenue.curr)}</div>
+            <div className="small" style={{color:(kpiHB.revenue.delta??0)>=0?'#10b981':'#ef4444'}}>
+              {kpiHB.revenue.delta!==undefined ? `${kpiHB.revenue.delta>=0?'▲':'▼'} ${kpiHB.revenue.delta.toFixed(1)}%` : '—'}
+            </div>
+          </div>
+          <div className="small">Units: {fmt(kpiHB.units.curr)} ({kpiHB.units.delta!==undefined ? `${kpiHB.units.delta>=0?'▲':'▼'} ${kpiHB.units.delta.toFixed(1)}%`:'—'}) • Spend: {fmtTL(kpiHB.spend.curr)} ({kpiHB.spend.delta!==undefined ? `${kpiHB.spend.delta>=0?'▲':'▼'} ${kpiHB.spend.delta.toFixed(1)}%`:'—'})</div>
+        </Card>
+
+        {/* Boş alan ya da küçük not */}
+        <Card>
+          <div className="small">Tip</div>
+          <div className="small">KPI kartları seçili **{mode}** görünümüne göre güncellenir. Weekly için “önceki hafta”, Monthly için “önceki ay” baz alınır.</div>
+        </Card>
+      </div>
+
+      {/* Hızlı giriş + tablo */}
       <Card>
         <div className="hgrid" style={{gridTemplateColumns:'repeat(6, minmax(0,1fr))'}}>
           <div><div className="small">Date</div><input type="date" value={dailyDate} onChange={e=>setDailyDate(e.target.value)} /></div>
@@ -200,8 +319,9 @@ export default function Dashboard() {
         </div>
       </Card>
 
-      {/* REVENUE */}
+      {/* REVENUE & SPEND */}
       <div className="hgrid grid2" style={{marginTop:16}}>
+        {/* REVENUE */}
         <Card>
           <div className="header"><div><TrendingUp style={{width:18,height:18}}/> Revenue</div></div>
           <div style={{height:300}}>
@@ -218,10 +338,8 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#3a3a3a" />
                 <XAxis dataKey="period" stroke="#cfd3ff"/>
                 <YAxis stroke="#cfd3ff" tickFormatter={(v)=>nf.format(v as number)} />
-                <Tooltip
-                  contentStyle={{ background:"#111", border:"1px solid #333", color:"#fff" }}
-                  formatter={(val:any, name)=>[fmtTL(val as number), name]}
-                />
+                <Tooltip contentStyle={{ background:"#111", border:"1px solid #333", color:"#fff" }}
+                         formatter={(val:any, name)=>[fmtTL(val as number), name]} />
                 <Legend/>
                 <Line type="monotone" dataKey="Trendyol" stroke="url(#gradTyRev)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
                 <Line type="monotone" dataKey="Hepsiburada" stroke="url(#gradHbRev)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
@@ -247,10 +365,8 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#3a3a3a" />
                 <XAxis dataKey="period" stroke="#cfd3ff"/>
                 <YAxis stroke="#cfd3ff" tickFormatter={(v)=>nf.format(v as number)} />
-                <Tooltip
-                  contentStyle={{ background:"#111", border:"1px solid #333", color:"#fff" }}
-                  formatter={(val:any, name)=>[fmtTL(val as number), name]}
-                />
+                <Tooltip contentStyle={{ background:"#111", border:"1px solid #333", color:"#fff" }}
+                         formatter={(val:any, name)=>[fmtTL(val as number), name]} />
                 <Legend/>
                 <Line type="monotone" dataKey="Trendyol" stroke="url(#gradTySp)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
                 <Line type="monotone" dataKey="Hepsiburada" stroke="url(#gradHbSp)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
@@ -279,10 +395,8 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#3a3a3a" />
                 <XAxis dataKey="period" stroke="#cfd3ff"/>
                 <YAxis stroke="#cfd3ff" tickFormatter={(v)=>nf.format(v as number)} />
-                <Tooltip
-                  contentStyle={{ background:"#111", border:"1px solid #333", color:"#fff" }}
-                  formatter={(val:any, name)=>[fmt(val as number), name]}
-                />
+                <Tooltip contentStyle={{ background:"#111", border:"1px solid #333", color:"#fff" }}
+                         formatter={(val:any, name)=>[fmt(val as number), name]} />
                 <Legend/>
                 <Line type="monotone" dataKey="Trendyol" stroke="url(#gradTyUn)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
                 <Line type="monotone" dataKey="Hepsiburada" stroke="url(#gradHbUn)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
@@ -308,10 +422,8 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#3a3a3a" />
                 <XAxis dataKey="period" stroke="#cfd3ff"/>
                 <YAxis stroke="#cfd3ff" tickFormatter={(v)=>nf.format(v as number)} />
-                <Tooltip
-                  contentStyle={{ background:"#111", border:"1px solid #333", color:"#fff" }}
-                  formatter={(val:any, name)=>[(val as number).toFixed(2), name]}
-                />
+                <Tooltip contentStyle={{ background:"#111", border:"1px solid #333", color:"#fff" }}
+                         formatter={(val:any, name)=>[(val as number).toFixed(2), name]} />
                 <Legend/>
                 <Line type="monotone" dataKey="Trendyol" stroke="url(#gradTyRo)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
                 <Line type="monotone" dataKey="Hepsiburada" stroke="url(#gradHbRo)" strokeWidth={3} dot={{r:3}} activeDot={{r:6}} />
@@ -320,7 +432,42 @@ export default function Dashboard() {
           </div>
         </Card>
       </div>
+
+      {/* TIMELINE (WEEKLY) */}
+      <Card>
+        <div className="header"><div>Timeline (Weekly)</div></div>
+        <div style={{height:320}}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={tsTimeline}>
+              <defs>
+                <linearGradient id="gRev" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#ff7f0e"/><stop offset="100%" stopColor="#ffb347"/>
+                </linearGradient>
+                <linearGradient id="gSp" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#7c62ff"/><stop offset="100%" stopColor="#b19cd9"/>
+                </linearGradient>
+                <linearGradient id="gUn" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#22c55e"/><stop offset="100%" stopColor="#86efac"/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#3a3a3a" />
+              <XAxis dataKey="period" stroke="#cfd3ff"/>
+              <YAxis stroke="#cfd3ff" tickFormatter={(v)=>nf.format(v as number)} />
+              <Tooltip
+                contentStyle={{ background:"#111", border:"1px solid #333", color:"#fff" }}
+                formatter={(value:any, name:string) => {
+                  if (name === "Units") return [fmt(value as number), name];
+                  return [fmtTL(value as number), name];
+                }}
+              />
+              <Legend/>
+              <Line type="monotone" dataKey="Revenue" stroke="url(#gRev)" strokeWidth={3} dot={{r:2}}/>
+              <Line type="monotone" dataKey="Spend"   stroke="url(#gSp)"  strokeWidth={3} dot={{r:2}}/>
+              <Line type="monotone" dataKey="Units"   stroke="url(#gUn)"  strokeWidth={3} dot={{r:2}}/>
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
     </div>
   );
 }
-
