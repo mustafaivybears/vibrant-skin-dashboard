@@ -133,7 +133,50 @@ export default function Dashboard() {
     upsertDelta('Monthly', monthId, monthId, entry.channel, entry.revenue, entry.spend, entry.units, -1);
     upsertDelta('Weekly', weekId, `${iw.year} W${String(iw.week).padStart(2,'0')}`, entry.channel, entry.revenue, entry.spend, entry.units, -1);
     setDailyEntries(prev => { const next=prev.filter(e=>e.id!==entry.id); persistDaily(entry,'delete'); return next; });
+  }// --- Weekly upsert + Bulk import ---
+function upsertWeekly(id: string, label: string, ch: Channel, rev: number, sp: number, un: number) {
+  setPeriods(prev => {
+    const next = [...prev];
+    let i = next.findIndex(p => p.id === id && p.kind === "Weekly");
+    if (i < 0) {
+      next.push({
+        id, label, kind: "Weekly",
+        data: { Trendyol: { revenue: 0, spend: 0, units: 0 }, Hepsiburada: { revenue: 0, spend: 0, units: 0 } }
+      });
+      i = next.length - 1;
+    }
+    const cur = next[i].data[ch];
+    next[i].data[ch] = {
+      revenue: (cur.revenue || 0) + rev,
+      spend:   (cur.spend   || 0) + sp,
+      units:   (cur.units   || 0) + un
+    };
+    persistPeriod(next[i]);
+    return next;
+  });
+}
+
+function importWeeklyFromText(text: string) {
+  // Beklenen format (satır başına):
+  // 2025-W31,Trendyol,Revenue,Spend,Units
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  let ok = 0, fail = 0;
+
+  for (const line of lines) {
+    const parts = line.split(",").map(s => s.trim());
+    if (parts.length < 5) { fail++; continue; }
+    const [id, chRaw, revStr, spStr, unStr] = parts;
+    const ch = (chRaw === "Trendyol" || chRaw === "Hepsiburada") ? chRaw as Channel : null;
+    const rev = Number(revStr), sp = Number(spStr), un = Number(unStr);
+    if (!id || !ch || Number.isNaN(rev) || Number.isNaN(sp) || Number.isNaN(un)) { fail++; continue; }
+
+    const label = id.replace("W", " W");
+    upsertWeekly(id, label, ch, rev, sp, un);
+    ok++;
   }
+  alert(`Weekly import: ${ok} satır işlendi, ${fail} satır atlandı.`);
+}
+
 
   // ---- View datasets (mode'a göre) ----
   const filtered = useMemo(()=>periods.filter(p=>p.kind===mode).sort((a,b)=>a.id.localeCompare(b.id)), [periods,mode]);
