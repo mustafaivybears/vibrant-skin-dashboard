@@ -1,35 +1,63 @@
+// REPLACE WHOLE FILE: src/Dashboard.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, Legend,
+  ResponsiveContainer, CartesianGrid
+} from "recharts";
 import { Layers, TrendingUp, DollarSign, CalendarClock, Trash2 } from "lucide-react";
 import { createClient } from '@supabase/supabase-js';
 
-// ---- Number & currency formatters (de-DE) ----
+// ---------- Number & currency formatters (de-DE) ----------
 const nf  = new Intl.NumberFormat('de-DE'); // 60.000
 const tf  = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }); // 60.000 ₺
 const fmt  = (v?: number) => nf.format((v ?? 0));
 const fmtTL = (v?: number) => tf.format((v ?? 0));
 
-// ---- Backend (opsiyonel Supabase) ----
+// ---------- Supabase (varsa) ----------
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL  || (window as any).VITE_SUPABASE_URL;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON || (window as any).VITE_SUPABASE_ANON;
 const supabase = (SUPABASE_URL && SUPABASE_ANON) ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
 
+// ---------- UI helpers ----------
 const Card = ({ className = "", children }: {className?: string, children: any}) => (
   <div className={`card ${className}`}>{children}</div>
 );
 
+// ---------- Types ----------
 const CHANNELS = ["Trendyol", "Hepsiburada"] as const;
 type Channel = (typeof CHANNELS)[number];
 type ChannelDatum = { revenue: number; spend: number; units: number };
 type Period = { id: string; label: string; kind: "Monthly" | "Weekly"; data: Record<Channel, ChannelDatum> };
 type DailyEntry = { id: string; date: string; channel: Channel; revenue: number; spend: number; units: number };
 
-// ---- Seed (Monthly) ----
+// ---------- Helpers ----------
+function isoWeek(d: Date) {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return { year: date.getUTCFullYear(), week: weekNo };
+}
+
+// ---------- Seed (Monthly) ----------
 const seedData: Period[] = [
-  { id: "2025-06", label: "2025-06", kind: "Monthly", data: { Trendyol: { revenue: 31755, spend: 2000, units: 121 }, Hepsiburada: { revenue: 21510, spend: 1000, units: 66 } } },
-  { id: "2025-07", label: "2025-07", kind: "Monthly", data: { Trendyol: { revenue: 35718, spend: 2200, units: 115 }, Hepsiburada: { revenue: 24583, spend: 1100, units: 68 } } },
-  { id: "2025-08", label: "2025-08", kind: "Monthly", data: { Trendyol: { revenue: 50162, spend: 4386, units: 199 }, Hepsiburada: { revenue: 27457, spend: 1186, units: 93 } } },
-  { id: "2025-09", label: "2025-09 (to date)", kind: "Monthly", data: { Trendyol: { revenue: 26482, spend: 2788, units: 73 }, Hepsiburada: { revenue: 13660, spend: 345, units: 43 } } },
+  { id: "2025-06", label: "2025-06", kind: "Monthly", data: {
+    Trendyol: { revenue: 31755, spend: 2000, units: 121 },
+    Hepsiburada: { revenue: 21510, spend: 1000, units: 66 } }
+  },
+  { id: "2025-07", label: "2025-07", kind: "Monthly", data: {
+    Trendyol: { revenue: 35718, spend: 2200, units: 115 },
+    Hepsiburada: { revenue: 24583, spend: 1100, units: 68 } }
+  },
+  { id: "2025-08", label: "2025-08", kind: "Monthly", data: {
+    Trendyol: { revenue: 50162, spend: 4386, units: 199 },
+    Hepsiburada: { revenue: 27457, spend: 1186, units: 93 } }
+  },
+  { id: "2025-09", label: "2025-09 (to date)", kind: "Monthly", data: {
+    Trendyol: { revenue: 26482, spend: 2788, units: 73 },
+    Hepsiburada: { revenue: 13660, spend: 345, units: 43 } }
+  },
 ];
 
 export default function Dashboard() {
@@ -39,7 +67,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState<boolean>(true);
   const backend: 'supabase'|'local' = supabase ? 'supabase':'local';
 
-  // Günlük giriş alanları (default bugün)
+  // Günlük giriş alanları (default: bugünün tarihi)
   const today = new Date();
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -50,17 +78,7 @@ export default function Dashboard() {
   const [dailySpend, setDailySpend] = useState<number>(0);
   const [dailyUnits, setDailyUnits] = useState<number>(0);
 
-  // ISO week hesaplama
-  function isoWeek(d: Date) {
-    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    const dayNum = date.getUTCDay() || 7;
-    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1));
-    const weekNo = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-    return { year: date.getUTCFullYear(), week: weekNo };
-  }
-
-  // Veri yükleme
+  // --------- Load / persist ----------
   async function loadAll() {
     setLoading(true);
     try {
@@ -68,7 +86,10 @@ export default function Dashboard() {
         const { data: pRows } = await supabase.from('periods').select('*').order('id');
         const { data: dRows } = await supabase.from('daily_entries').select('*').order('date');
         const p: Period[] = (pRows||[]).map((r:any)=>({ id:r.id,label:r.label,kind:r.kind,data:r.data }));
-        const d: DailyEntry[] = (dRows||[]).map((r:any)=>({ id:r.id,date:r.date,channel:r.channel,revenue:Number(r.revenue),spend:Number(r.spend),units:Number(r.units) }));
+        const d: DailyEntry[] = (dRows||[]).map((r:any)=>({
+          id:r.id,date:r.date,channel:r.channel,
+          revenue:Number(r.revenue),spend:Number(r.spend),units:Number(r.units)
+        }));
         setPeriods(p.length ? p : seedData);
         setDailyEntries(d);
       } else {
@@ -80,8 +101,6 @@ export default function Dashboard() {
     } finally { setLoading(false); }
   }
   useEffect(()=>{ loadAll(); }, []);
-
-  // Local persist
   useEffect(()=>{
     if (!supabase) {
       localStorage.setItem('vs_dashboard_periods', JSON.stringify(periods));
@@ -98,31 +117,44 @@ export default function Dashboard() {
     else await supabase.from('daily_entries').delete().eq('id', e.id);
   }
 
-  // Period update helper
-  function upsertDelta(kind: 'Monthly'|'Weekly', id: string, label: string, ch: Channel, rev: number, sp: number, un: number, sign: 1|-1=1) {
+  // --------- Upsert Monthly/Weekly by delta (günlük girişten) ----------
+  function upsertDelta(kind: 'Monthly'|'Weekly', id: string, label: string,
+                       ch: Channel, rev: number, sp: number, un: number, sign: 1|-1=1) {
     setPeriods(prev => {
       const next = [...prev];
       let i = next.findIndex(p => p.id===id && p.kind===kind);
-      if (i<0) { next.push({ id,label,kind,data:{Trendyol:{revenue:0,spend:0,units:0}, Hepsiburada:{revenue:0,spend:0,units:0}}}); i = next.length-1; }
+      if (i<0) {
+        next.push({
+          id,label,kind,
+          data:{Trendyol:{revenue:0,spend:0,units:0}, Hepsiburada:{revenue:0,spend:0,units:0}}
+        });
+        i = next.length-1;
+      }
       const cur = next[i].data[ch];
-      next[i].data[ch] = { revenue:(cur.revenue||0)+rev*sign, spend:(cur.spend||0)+sp*sign, units:(cur.units||0)+un*sign };
+      next[i].data[ch] = {
+        revenue:(cur.revenue||0)+rev*sign,
+        spend:(cur.spend||0)+sp*sign,
+        units:(cur.units||0)+un*sign
+      };
       persistPeriod(next[i]);
       return next;
     });
   }
 
-  // Günlük ekleme / silme
   function addDaily() {
     if (!dailyDate) return;
     const d = new Date(dailyDate + 'T00:00:00');
     const monthId = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     const iw = isoWeek(d);
     const weekId = `${iw.year}-W${String(iw.week).padStart(2,'0')}`;
-
     upsertDelta('Monthly', monthId, monthId, dailyChannel, dailyRevenue, dailySpend, dailyUnits, 1);
     upsertDelta('Weekly', weekId, `${iw.year} W${String(iw.week).padStart(2,'0')}`, dailyChannel, dailyRevenue, dailySpend, dailyUnits, 1);
 
-    const entry: DailyEntry = { id: `${dailyDate}-${dailyChannel}-${Date.now()}`, date: dailyDate, channel: dailyChannel, revenue: dailyRevenue, spend: dailySpend, units: dailyUnits };
+    const entry: DailyEntry = {
+      id: `${dailyDate}-${dailyChannel}-${Date.now()}`,
+      date: dailyDate, channel: dailyChannel,
+      revenue: dailyRevenue, spend: dailySpend, units: dailyUnits
+    };
     setDailyEntries(prev => { const next=[...prev,entry]; persistDaily(entry,'insert'); return next; });
 
     setDailyRevenue(0); setDailySpend(0); setDailyUnits(0);
@@ -133,14 +165,12 @@ export default function Dashboard() {
     const monthId = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     const iw = isoWeek(d);
     const weekId = `${iw.year}-W${String(iw.week).padStart(2,'0')}`;
-
     upsertDelta('Monthly', monthId, monthId, entry.channel, entry.revenue, entry.spend, entry.units, -1);
     upsertDelta('Weekly', weekId, `${iw.year} W${String(iw.week).padStart(2,'0')}`, entry.channel, entry.revenue, entry.spend, entry.units, -1);
-
     setDailyEntries(prev => { const next=prev.filter(e=>e.id!==entry.id); persistDaily(entry,'delete'); return next; });
   }
 
-  // --- Weekly upsert + Bulk import ---
+  // --------- Weekly BULK IMPORT (UI + logic) ----------
   function upsertWeekly(id: string, label: string, ch: Channel, rev: number, sp: number, un: number) {
     setPeriods(prev => {
       const next = [...prev];
@@ -148,7 +178,8 @@ export default function Dashboard() {
       if (i < 0) {
         next.push({
           id, label, kind: "Weekly",
-          data: { Trendyol: { revenue: 0, spend: 0, units: 0 }, Hepsiburada: { revenue: 0, spend: 0, units: 0 } }
+          data: { Trendyol: { revenue: 0, spend: 0, units: 0 },
+                  Hepsiburada: { revenue: 0, spend: 0, units: 0 } }
         });
         i = next.length - 1;
       }
@@ -164,11 +195,9 @@ export default function Dashboard() {
   }
 
   function importWeeklyFromText(text: string) {
-    // Format (her satır):
-    // 2025-W31,Trendyol,Revenue,Spend,Units
+    // Format: YYYY-Wxx,Channel,Revenue,Spend,Units
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     let ok = 0, fail = 0;
-
     for (const line of lines) {
       const parts = line.split(",").map(s => s.trim());
       if (parts.length < 5) { fail++; continue; }
@@ -183,23 +212,14 @@ export default function Dashboard() {
     alert(`Weekly import: ${ok} satır işlendi, ${fail} satır atlandı.`);
   }
 
-  // ---- Görünüm veri setleri ----
-  // Seçili moda göre sıralı periodlar
+  // --------- View datasets (mode'a göre) ----------
   const filtered = useMemo(
-    () => periods.filter(p => p.kind === mode).sort((a,b)=>a.id.localeCompare(b.id)),
-    [periods, mode]
+    ()=>periods.filter(p=>p.kind===mode).sort((a,b)=>a.id.localeCompare(b.id)),
+    [periods,mode]
   );
 
-  // Weekly boşsa KPI & timeline için Monthly'ye fallback
-  const kpiRows = useMemo(() => {
-    if (filtered.length === 0 && mode === "Weekly") {
-      return periods.filter(p => p.kind === "Monthly").sort((a,b)=>a.id.localeCompare(b.id));
-    }
-    return filtered;
-  }, [filtered, mode, periods]);
-
-  const rows = useMemo(()=>kpiRows.map((p,i)=>{
-    const prev = kpiRows[i-1];
+  const rows = useMemo(()=>filtered.map((p,i)=>{
+    const prev = filtered[i-1];
     const calc = (ch:Channel)=>{
       const cur=p.data[ch]; const prv=prev?.data[ch];
       const roas = cur.spend>0 ? cur.revenue/cur.spend : undefined;
@@ -208,27 +228,29 @@ export default function Dashboard() {
       return { roas, momRev:pp(cur?.revenue,prv?.revenue), momSpend:pp(cur?.spend,prv?.spend), momUnits:pp(cur?.units,prv?.units), momRoas:pp(roas,prevRoas) };
     };
     return { ...p, meta:{Trendyol:calc('Trendyol'), Hepsiburada:calc('Hepsiburada')} };
-  }), [kpiRows]);
+  }), [filtered]);
 
-  // Seriler
   const ts = (key: keyof ChannelDatum) => rows.map(r=>({ period:r.label, Trendyol:r.data.Trendyol[key], Hepsiburada:r.data.Hepsiburada[key] }));
   const tsRevenue = useMemo(()=>ts('revenue'),[rows]);
   const tsSpend   = useMemo(()=>ts('spend'),[rows]);
   const tsUnits   = useMemo(()=>ts('units'),[rows]);
   const tsROAS    = useMemo(()=>rows.map(r=>({ period:r.label, Trendyol:r.meta.Trendyol.roas ?? 0, Hepsiburada:r.meta.Hepsiburada.roas ?? 0 })),[rows]);
 
-  // KPI toplamları
+  // --------- KPI (seçili mode'a göre) ----------
+  const kpiRows = filtered; // mode: Monthly veya Weekly
   const lastIdx = kpiRows.length - 1;
   const currP = lastIdx >= 0 ? kpiRows[lastIdx] : undefined;
   const prevP = lastIdx > 0 ? kpiRows[lastIdx - 1] : undefined;
-  const sumAll = (p?: Period, key?: keyof ChannelDatum) => p && key ? (p.data.Trendyol[key] + p.data.Hepsiburada[key]) : 0;
-  const dlt = (c:number,p:number)=> (p?((c-p)/p)*100:undefined);
+
+  const sumAll = (p?: Period, key?: keyof ChannelDatum) =>
+    p && key ? (p.data.Trendyol[key] + p.data.Hepsiburada[key]) : 0;
 
   const kpiTotal = {
     revenue: { curr: sumAll(currP, "revenue"), prev: sumAll(prevP, "revenue") },
     units:   { curr: sumAll(currP, "units"),   prev: sumAll(prevP, "units") },
     spend:   { curr: sumAll(currP, "spend"),   prev: sumAll(prevP, "spend") },
   };
+  const dlt = (c:number,p:number)=> (p?((c-p)/p)*100:undefined);
   const kpiTotalDelta = {
     revenue: dlt(kpiTotal.revenue.curr, kpiTotal.revenue.prev),
     units:   dlt(kpiTotal.units.curr,   kpiTotal.units.prev),
@@ -240,25 +262,34 @@ export default function Dashboard() {
     prev: prevP ? prevP.data[ch][key] : 0,
     delta: dlt(currP ? currP.data[ch][key] : 0, prevP ? prevP.data[ch][key] : 0)
   });
-  const kpiTY = { revenue: byCh("Trendyol","revenue"), units: byCh("Trendyol","units"), spend: byCh("Trendyol","spend") };
-  const kpiHB = { revenue: byCh("Hepsiburada","revenue"), units: byCh("Hepsiburada","units"), spend: byCh("Hepsiburada","spend") };
+  const kpiTY = {
+    revenue: byCh("Trendyol","revenue"),
+    units:   byCh("Trendyol","units"),
+    spend:   byCh("Trendyol","spend"),
+  };
+  const kpiHB = {
+    revenue: byCh("Hepsiburada","revenue"),
+    units:   byCh("Hepsiburada","units"),
+    spend:   byCh("Hepsiburada","spend"),
+  };
 
-  // Weekly timeline: Weekly varsa onu kullan, yoksa Monthly toplamları göster
-  const weeklyRows = useMemo(() => periods.filter(p => p.kind === "Weekly").sort((a,b)=>a.id.localeCompare(b.id)), [periods]);
-  const monthlyRows = useMemo(() => periods.filter(p => p.kind === "Monthly").sort((a,b)=>a.id.localeCompare(b.id)), [periods]);
-  const sourceForTimeline = weeklyRows.length > 0 ? weeklyRows : monthlyRows;
+  // --------- Weekly timeline (sum of channels) ----------
+  const weeklyRows = useMemo(() => periods
+    .filter(p => p.kind === "Weekly")
+    .sort((a,b)=>a.id.localeCompare(b.id)), [periods]);
 
-  const tsTimeline = sourceForTimeline.map(p => ({
-    period: p.label,
-    Revenue: p.data.Trendyol.revenue + p.data.Hepsiburada.revenue,
-    Spend:   p.data.Trendyol.spend   + p.data.Hepsiburada.spend,
-    Units:   p.data.Trendyol.units   + p.data.Hepsiburada.units,
+  const tsTimeline = weeklyRows.map(w => ({
+    period: w.label,
+    Revenue: w.data.Trendyol.revenue + w.data.Hepsiburada.revenue,
+    Spend:   w.data.Trendyol.spend   + w.data.Hepsiburada.spend,
+    Units:   w.data.Trendyol.units   + w.data.Hepsiburada.units,
   }));
 
   if (loading) return <div style={{padding:20}}>Loading…</div>;
 
   return (
     <div style={{padding:24}}>
+      {/* Header */}
       <div className="header">
         <h1><Layers style={{width:20,height:20,verticalAlign:'-3px'}}/> Vibrant Skin Dashboard</h1>
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
@@ -270,40 +301,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* BULK WEEKLY IMPORT */}
-      <Card>
-        <div className="small" style={{marginBottom:8}}>Bulk Weekly Import (paste CSV)</div>
-        <div style={{display:'grid', gridTemplateColumns:'1fr auto', gap:12}}>
-          <textarea
-            id="weekly-import"
-            placeholder={[
-              'Format: YYYY-Wxx,Channel,Revenue,Spend,Units',
-              'Örnek:',
-              '2025-W31,Trendyol,14000,1200,65',
-              '2025-W31,Hepsiburada,9000,600,38',
-              '2025-W32,Trendyol,15000,1300,70',
-              '2025-W32,Hepsiburada,10000,650,40'
-            ].join('\n')}
-            style={{width:'100%', minHeight:120, fontFamily:'monospace'}}
-          />
-          <div style={{display:'flex', flexDirection:'column', gap:8}}>
-            <button onClick={()=>{
-              const ta = document.getElementById('weekly-import') as HTMLTextAreaElement | null;
-              if (ta) importWeeklyFromText(ta.value);
-            }}>Import Weekly</button>
-            <button onClick={()=>{
-              const ta = document.getElementById('weekly-import') as HTMLTextAreaElement | null;
-              if (ta) ta.value = '';
-            }} style={{opacity:.8}}>Clear</button>
-            <div className="small" style={{opacity:.7}}>
-              Satır başına: <code>2025-W31,Trendyol,14000,1200,65</code>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* KPI — TOTAL (mode'a göre) */}
-      <div className="hgrid" style={{gridTemplateColumns:'repeat(3, minmax(0,1fr))', margin:'12px 0'}}>
+      {/* KPI — TOTAL */}
+      <div className="hgrid" style={{gridTemplateColumns:'repeat(3, minmax(0,1fr))', margin:'0 0 12px 0'}}>
         <Card>
           <div className="small">Revenue (vs previous {mode === 'Monthly' ? 'month' : 'week'})</div>
           <div style={{display:'flex', alignItems:'baseline', gap:12}}>
@@ -349,7 +348,10 @@ export default function Dashboard() {
               {kpiTY.revenue.delta!==undefined ? `${kpiTY.revenue.delta>=0?'▲':'▼'} ${kpiTY.revenue.delta.toFixed(1)}%` : '—'}
             </div>
           </div>
-          <div className="small">Units: {fmt(kpiTY.units.curr)} ({kpiTY.units.delta!==undefined ? `${kpiTY.units.delta>=0?'▲':'▼'} ${kpiTY.units.delta.toFixed(1)}%`:'—'}) • Spend: {fmtTL(kpiTY.spend.curr)} ({kpiTY.spend.delta!==undefined ? `${kpiTY.spend.delta>=0?'▲':'▼'} ${kpiTY.spend.delta.toFixed(1)}%`:'—'})</div>
+          <div className="small">
+            Units: {fmt(kpiTY.units.curr)} ({kpiTY.units.delta!==undefined ? `${kpiTY.units.delta>=0?'▲':'▼'} ${kpiTY.units.delta.toFixed(1)}%`:'—'})
+            {' '}• Spend: {fmtTL(kpiTY.spend.curr)} ({kpiTY.spend.delta!==undefined ? `${kpiTY.spend.delta>=0?'▲':'▼'} ${kpiTY.spend.delta.toFixed(1)}%`:'—'})
+          </div>
         </Card>
 
         {/* Hepsiburada */}
@@ -361,26 +363,63 @@ export default function Dashboard() {
               {kpiHB.revenue.delta!==undefined ? `${kpiHB.revenue.delta>=0?'▲':'▼'} ${kpiHB.revenue.delta.toFixed(1)}%` : '—'}
             </div>
           </div>
-          <div className="small">Units: {fmt(kpiHB.units.curr)} ({kpiHB.units.delta!==undefined ? `${kpiHB.units.delta>=0?'▲':'▼'} ${kpiHB.units.delta.toFixed(1)}%`:'—'}) • Spend: {fmtTL(kpiHB.spend.curr)} ({kpiHB.spend.delta!==undefined ? `${kpiHB.spend.delta>=0?'▲':'▼'} ${kpiHB.spend.delta.toFixed(1)}%`:'—'})</div>
+          <div className="small">
+            Units: {fmt(kpiHB.units.curr)} ({kpiHB.units.delta!==undefined ? `${kpiHB.units.delta>=0?'▲':'▼'} ${kpiHB.units.delta.toFixed(1)}%`:'—'})
+            {' '}• Spend: {fmtTL(kpiHB.spend.curr)} ({kpiHB.spend.delta!==undefined ? `${kpiHB.spend.delta>=0?'▲':'▼'} ${kpiHB.spend.delta.toFixed(1)}%`:'—'})
+          </div>
         </Card>
 
+        {/* Not */}
         <Card>
           <div className="small">Tip</div>
           <div className="small">KPI kartları seçili <b>{mode}</b> görünümüne göre güncellenir. Weekly için “önceki hafta”, Monthly için “önceki ay” baz alınır.</div>
         </Card>
       </div>
 
-      {/* Günlük hızlı giriş + tablo */}
+      {/* BULK WEEKLY IMPORT (Yeni) */}
+      <Card>
+        <div className="small" style={{marginBottom:6}}>Bulk Weekly Import (CSV)</div>
+        <textarea
+          id="weeklyImport"
+          placeholder="2025-W31,Trendyol,14000,1200,65"
+          style={{width:"100%", height:100, background:"#111", color:"#fff", padding:8, borderRadius:6}}
+        />
+        <div style={{marginTop:8}}>
+          <button
+            onClick={()=>{
+              const ta = document.getElementById("weeklyImport") as HTMLTextAreaElement;
+              if (ta) importWeeklyFromText(ta.value);
+            }}
+            style={{padding:"6px 12px", borderRadius:6, background:"#ff7f0e", color:"#000", fontWeight:600}}
+          >
+            Import Weekly
+          </button>
+        </div>
+      </Card>
+
+      {/* Hızlı Günlük Giriş + Tablo */}
       <Card>
         <div className="hgrid" style={{gridTemplateColumns:'repeat(6, minmax(0,1fr))'}}>
           <div><div className="small">Date</div><input type="date" value={dailyDate} onChange={e=>setDailyDate(e.target.value)} /></div>
-          <div><div className="small">Channel</div><select value={dailyChannel} onChange={e=>setDailyChannel(e.target.value as any)}><option>Trendyol</option><option>Hepsiburada</option></select></div>
-          <div><div className="small">Revenue (TL)</div><input type="number" value={dailyRevenue} onChange={e=>setDailyRevenue(parseFloat(e.target.value||'0'))} /></div>
-          <div><div className="small">Spend (TL)</div><input type="number" value={dailySpend} onChange={e=>setDailySpend(parseFloat(e.target.value||'0'))} /></div>
-          <div><div className="small">Units</div><input type="number" value={dailyUnits} onChange={e=>setDailyUnits(parseFloat(e.target.value||'0'))} /></div>
+          <div><div className="small">Channel</div>
+            <select value={dailyChannel} onChange={e=>setDailyChannel(e.target.value as any)}>
+              <option>Trendyol</option><option>Hepsiburada</option>
+            </select>
+          </div>
+          <div><div className="small">Revenue (TL)</div>
+            <input type="number" value={dailyRevenue} onChange={e=>setDailyRevenue(parseFloat(e.target.value||'0'))} />
+          </div>
+          <div><div className="small">Spend (TL)</div>
+            <input type="number" value={dailySpend} onChange={e=>setDailySpend(parseFloat(e.target.value||'0'))} />
+          </div>
+          <div><div className="small">Units</div>
+            <input type="number" value={dailyUnits} onChange={e=>setDailyUnits(parseFloat(e.target.value||'0'))} />
+          </div>
           <div style={{display:'flex',alignItems:'end'}}><button onClick={addDaily}>Add Day</button></div>
         </div>
-        <div className="small" style={{marginTop:6}}>Günlük giriş ay ve ISO haftasına otomatik eklenir. Backend: {backend==='supabase'?'Supabase':'LocalStorage'}</div>
+        <div className="small" style={{marginTop:6}}>
+          Günlük giriş ay ve ISO haftasına otomatik eklenir. Backend: {backend==='supabase'?'Supabase':'LocalStorage'}
+        </div>
 
         <div style={{marginTop:12,overflowX:'auto'}}>
           <table>
@@ -515,9 +554,9 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* TIMELINE (WEEKLY fallback'lı) */}
+      {/* TIMELINE (WEEKLY SUM) */}
       <Card>
-        <div className="header"><div>Timeline ({weeklyRows.length>0 ? 'Weekly' : 'Monthly (fallback)'})</div></div>
+        <div className="header"><div>Timeline (Weekly)</div></div>
         <div style={{height:320}}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={tsTimeline}>
@@ -543,4 +582,14 @@ export default function Dashboard() {
                 }}
               />
               <Legend/>
-              <Line type="monotone" dataKey="Revenue" stroke="url(#gRev
+              <Line type="monotone" dataKey="Revenue" stroke="url(#gRev)" strokeWidth={3} dot={{r:2}}/>
+              <Line type="monotone" dataKey="Spend"   stroke="url(#gSp)"  strokeWidth={3} dot={{r:2}}/>
+              <Line type="monotone" dataKey="Units"   stroke="url(#gUn)"  strokeWidth={3} dot={{r:2}}/>
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
